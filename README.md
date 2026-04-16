@@ -18,7 +18,7 @@ Browser (S3) → API Gateway → Lambda → DynamoDB
 - DynamoDB (TTL)
 
 ## 🔥 Live Demo
-https://vemgtlgz5l.execute-api.us-east-1.amazonaws.com/prod
+http://snapvault-app.s3-website-us-east-1.amazonaws.com
 
 ## 👩‍💻 Author
 Madhu
