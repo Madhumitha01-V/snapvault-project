@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SnapVault — Zero Persistence Messaging</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+/* ── DESIGN SYSTEM ─────────────────────────── */
+:root{
+  --Y:#FFFC00;   /* snapchat yellow */
+  --B:#111;      /* near black      */
+  --W:#fff;
+  --G:#999;
+  --R:#FF3B30;
+  --GR:#00C853;
+  --OR:#FF9500;
+  --card-r:22px;
+  --pill:999px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+
+body{
+  font-family:'Nunito',sans-serif;
+  background:var(--Y);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding-bottom:60px;
+  overflow-x:hidden;
+  position:relative;
+}
+
+/* ── ANIMATED BG GHOSTS ─────────────────────── */
+.bg-ghost{
+  position:fixed;
+  pointer-events:none;
+  user-select:none;
+  opacity:0.06;
+  font-size:220px;
+  z-index:0;
+  animation:float 10s ease-in-out infinite;
+}
+.bg-ghost.r{top:-30px;right:-40px;animation-direction:reverse;}
+.bg-ghost.l{bottom:10px;left:-50px;font-size:150px;animation-delay:4s;}
+@keyframes float{
+  0%,100%{transform:translateY(0px) rotate(-6deg);}
+  50%{transform:translateY(-28px) rotate(6deg);}
+}
+
+/* ── FLOATING PARTICLES ─────────────────────── */
+.ptcl{
+  position:fixed;
+  pointer-events:none;
+  z-index:0;
+  font-size:16px;
+  opacity:0;
+  animation:rise linear infinite;
+}
+@keyframes rise{
+  0%{transform:translateY(100vh) scale(0.5);opacity:0;}
+  15%{opacity:0.2;}
+  85%{opacity:0.15;}
+  100%{transform:translateY(-5vh) scale(1.1);opacity:0;}
+}
+
+/* ── TOPBAR ─────────────────────────────────── */
+.topbar{
+  position:relative;z-index:10;
+  width:100%;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:26px 20px 14px;
+}
+.logo{display:flex;align-items:center;gap:9px;}
+.logo-icon{font-size:2.4rem;animation:float 4s ease-in-out infinite;}
+.logo-name{font-size:2rem;font-weight:900;color:var(--B);letter-spacing:-0.04em;}
+.live-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--B);color:var(--Y);
+  font-size:0.58rem;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;
+  border-radius:99px;padding:3px 9px;margin-left:3px;
+}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--R);animation:blink 1.2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.2;}}
+
+/* ── WRAPPER ─────────────────────────────────── */
+.wrap{width:100%;max-width:430px;padding:0 14px;position:relative;z-index:10;}
+
+/* ── AWS CONFIG STRIP ───────────────────────── */
+.cfg-strip{
+  background:var(--B);border-radius:16px;
+  padding:14px 16px;margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+  animation:slideDown 0.4s ease both;
+}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+.cfg-dot{width:10px;height:10px;border-radius:50%;background:var(--R);flex-shrink:0;transition:background 0.3s;}
+.cfg-dot.ok{background:var(--GR);}
+.cfg-text{flex:1;}
+.cfg-label{font-size:0.62rem;font-weight:900;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,252,0,0.6);margin-bottom:3px;}
+.cfg-url{font-size:0.72rem;font-weight:700;color:var(--Y);word-break:break-all;line-height:1.4;}
+.cfg-edit-btn{
+  padding:6px 12px;background:rgba(255,252,0,0.12);color:var(--Y);
+  border:1px solid rgba(255,252,0,0.25);border-radius:99px;
+  font-family:'Nunito',sans-serif;font-size:0.65rem;font-weight:900;
+  cursor:pointer;white-space:nowrap;transition:all 0.15s;
+}
+.cfg-edit-btn:hover{background:rgba(255,252,0,0.22);}
+
+/* url edit panel */
+.url-panel{
+  display:none;
+  background:var(--W);border-radius:16px;
+  padding:16px;margin-bottom:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.12);
+  animation:slideDown 0.3s ease both;
+}
+.url-lbl{font-size:0.6rem;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:var(--G);margin-bottom:7px;}
+.url-inp{
+  width:100%;border:2px solid #eee;border-radius:12px;
+  padding:11px 13px;font-family:'Nunito Sans',sans-serif;
+  font-size:0.8rem;color:var(--B);outline:none;
+  transition:border-color 0.2s;
+}
+.url-inp:focus{border-color:var(--Y);}
+.url-save{
+  margin-top:10px;width:100%;padding:11px;
+  background:var(--B);color:var(--Y);
+  border:none;border-radius:12px;
+  font-family:'Nunito',sans-serif;font-size:0.85rem;font-weight:900;
+  cursor:pointer;transition:opacity 0.15s;
+}
+.url-save:hover{opacity:0.85;}
+
+/* ── TABS ─────────────────────────────────────── */
+.tabs{
+  display:flex;background:rgba(0,0,0,0.13);
+  border-radius:var(--pill);padding:4px;margin-bottom:16px;
+}
+.tab{
+  flex:1;padding:10px 4px;border:none;border-radius:var(--pill);
+  font-family:'Nunito',sans-serif;font-size:0.82rem;font-weight:900;
+  cursor:pointer;background:transparent;color:rgba(0,0,0,0.38);
+  transition:all 0.22s;
+}
+.tab.on{
+  background:var(--B);color:var(--Y);
+  box-shadow:0 4px 18px rgba(0,0,0,0.18);
+}
+
+/* ── CARD ─────────────────────────────────────── */
+.card{
+  background:var(--W);
+  border-radius:var(--card-r);
+  padding:22px 20px;
+  box-shadow:0 14px 60px rgba(0,0,0,0.13),0 2px 6px rgba(0,0,0,0.06);
+  animation:popIn 0.38s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes popIn{
+  from{opacity:0;transform:scale(0.88) translateY(16px);}
+  to{opacity:1;transform:scale(1) translateY(0);}
+}
+.sec-lbl{
+  font-size:0.6rem;font-weight:900;letter-spacing:0.13em;
+  text-transform:uppercase;color:var(--G);margin-bottom:7px;
+}
+.mb{margin-bottom:15px;}
+
+/* ── FORM ELEMENTS ───────────────────────────── */
+input[type=text],textarea{
+  width:100%;border:2px solid #efefef;border-radius:13px;
+  padding:12px 14px;
+  font-family:'Nunito Sans',sans-serif;font-size:0.9rem;font-weight:600;
+  color:var(--B);background:#fafafa;outline:none;
+  transition:all 0.2s;
+}
+input[type=text]:focus,textarea:focus{
+  border-color:var(--Y);background:var(--W);
+  box-shadow:0 0 0 4px rgba(255,252,0,0.18);
+}
+input::placeholder,textarea::placeholder{color:#d0d0d0;}
+textarea{min-height:120px;resize:none;line-height:1.65;}
+
+/* ── EMOJI PICKER ────────────────────────────── */
+.ep{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px;}
+.ec{
+  font-size:1.35rem;width:43px;height:43px;
+  border-radius:13px;border:2.5px solid #eee;
+  background:#fafafa;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.16s;user-select:none;
+}
+.ec:hover{transform:scale(1.08);border-color:#ddd;}
+.ec.on{
+  border-color:var(--B);background:var(--Y);
+  transform:scale(1.2);
+  box-shadow:0 4px 14px rgba(0,0,0,0.14);
+}
+
+/* ── CHAR ROW ────────────────────────────────── */
+.char-row{display:flex;justify-content:space-between;align-items:center;margin:5px 0 16px;}
+.ttl-hint{font-size:0.68rem;font-weight:700;color:var(--G);}
+.cc{font-size:0.68rem;font-weight:700;color:#ccc;}
+.cc.warn{color:var(--R);}
+
+/* ── BUTTONS ─────────────────────────────────── */
+.btn{
+  width:100%;padding:15px;
+  background:var(--Y);color:var(--B);
+  border:none;border-radius:var(--pill);
+  font-family:'Nunito',sans-serif;font-size:0.98rem;font-weight:900;
+  letter-spacing:0.02em;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all 0.18s;position:relative;overflow:hidden;
+}
+.btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,0.14);}
+.btn:active:not(:disabled){transform:translateY(0);}
+.btn:disabled{opacity:0.42;cursor:not-allowed;}
+.btn.dark{background:var(--B);color:var(--Y);}
+.btn.dark:hover:not(:disabled){box-shadow:0 10px 30px rgba(0,0,0,0.28);}
+
+/* ── SHARE BOX ───────────────────────────────── */
+.share-box{
+  display:none;margin-top:15px;
+  background:#fffef0;border:2px solid var(--Y);
+  border-radius:18px;padding:15px;
+  animation:popIn 0.3s ease both;
+  position:relative;overflow:hidden;
+}
+.share-box::after{
+  content:'👻';position:absolute;right:-8px;bottom:-12px;
+  font-size:55px;opacity:0.07;pointer-events:none;
+}
+.sh-lbl{font-size:0.6rem;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#aaa;margin-bottom:8px;}
+.sh-row{display:flex;gap:8px;align-items:stretch;}
+.sh-id{
+  flex:1;font-size:0.68rem;font-weight:700;color:var(--B);
+  background:var(--W);border:1.5px solid #eee;border-radius:11px;
+  padding:9px 11px;word-break:break-all;line-height:1.45;
+  font-family:'Nunito Sans',sans-serif;
+}
+.sh-copy{
+  padding:8px 14px;background:var(--B);color:var(--Y);
+  border:none;border-radius:11px;
+  font-family:'Nunito',sans-serif;font-size:0.72rem;font-weight:900;
+  cursor:pointer;white-space:nowrap;transition:opacity 0.15s;
+}
+.sh-copy:hover{opacity:0.8;}
+.sh-warn{font-size:0.62rem;font-weight:700;color:#bbb;margin-top:8px;}
+
+/* ── TOAST ───────────────────────────────────── */
+.toast{
+  display:none;margin-top:13px;border-radius:14px;
+  padding:13px 15px;font-size:0.82rem;font-weight:700;
+  animation:popIn 0.25s ease both;
+}
+.toast.ok {background:#edfff5;border:2px solid #00C853;color:#005c24;}
+.toast.err{background:#fff0f0;border:2px solid var(--R);color:#b00;}
+
+/* ── DIVIDER ─────────────────────────────────── */
+hr{border:none;border-top:1.5px solid #f2f2f2;margin:18px 0;}
+
+/* ── ARCH BOX ────────────────────────────────── */
+.arch{background:#f8f8f8;border-radius:14px;padding:14px 15px;margin-top:15px;}
+.arch-title{font-size:0.58rem;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ccc;margin-bottom:10px;}
+.arch-row{display:flex;align-items:center;gap:9px;margin-bottom:6px;}
+.arch-icon{font-size:0.95rem;width:26px;text-align:center;}
+.arch-txt{font-size:0.73rem;font-weight:700;color:var(--B);flex:1;line-height:1.3;}
+.arch-tag{
+  font-size:0.56rem;font-weight:900;text-transform:uppercase;
+  letter-spacing:0.08em;padding:2px 8px;border-radius:99px;
+}
+.arch-tag.live{background:#edfff5;color:#005c24;border:1px solid #a5d6a7;}
+.arch-tag.aws {background:#fff8e1;color:#7c5a00;border:1px solid #ffe082;}
+
+/* ── INBOX LIST ──────────────────────────────── */
+.inbox-list{display:flex;flex-direction:column;gap:9px;margin-top:14px;}
+.snap-item{
+  background:#fafafa;border:2px solid #eee;border-radius:17px;
+  padding:13px 14px;cursor:pointer;
+  display:flex;align-items:center;gap:12px;
+  transition:all 0.18s;position:relative;overflow:hidden;
+}
+.snap-item::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:4px;border-radius:4px 0 0 4px;background:var(--Y);
+}
+.snap-item:hover{
+  border-color:var(--Y);background:#fffef0;
+  transform:translateX(4px);
+  box-shadow:0 4px 18px rgba(0,0,0,0.07);
+}
+.si-em{font-size:1.8rem;}
+.si-info{flex:1;min-width:0;}
+.si-from{font-size:0.82rem;font-weight:900;color:var(--B);}
+.si-meta{font-size:0.63rem;font-weight:700;color:var(--G);margin-top:2px;}
+.si-bar{height:4px;border-radius:99px;background:#eee;margin-top:7px;overflow:hidden;}
+.si-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--GR),var(--Y));}
+.si-badge{
+  font-size:0.58rem;font-weight:900;text-transform:uppercase;
+  letter-spacing:0.06em;padding:3px 9px;border-radius:99px;flex-shrink:0;
+}
+.si-badge.new{background:#ffebee;color:var(--R);}
+.si-badge.old{background:#f5f5f5;color:#aaa;}
+
+/* ── SNAP VIEWER ─────────────────────────────── */
+.snap-viewer{
+  display:none;margin-top:16px;border-radius:22px;overflow:hidden;
+  animation:popIn 0.42s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.sv-head{background:var(--B);padding:22px 20px 16px;text-align:center;}
+.sv-emoji{font-size:3.8rem;display:block;margin-bottom:10px;animation:float 2.5s ease-in-out infinite;}
+.sv-from-lbl{font-size:0.58rem;font-weight:900;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,252,0,0.5);margin-bottom:4px;}
+.sv-from-name{font-size:1rem;font-weight:900;color:var(--Y);}
+.sv-body{background:#161616;padding:18px 20px;}
+.sv-msg{
+  font-family:'Nunito Sans',sans-serif;
+  font-size:1.05rem;font-weight:600;color:#fff;
+  line-height:1.7;word-break:break-word;text-align:center;
+  background:rgba(255,255,255,0.05);border-radius:14px;padding:16px;
+}
+.sv-foot{background:var(--B);padding:16px 20px 20px;}
+.sv-tlbl{font-size:0.58rem;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.3);margin-bottom:8px;text-align:center;}
+.sv-track{width:100%;height:8px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden;}
+.sv-fill{height:100%;border-radius:99px;transition:width 1s linear,background 0.5s;}
+.sv-time{font-size:2.2rem;font-weight:900;color:var(--Y);text-align:center;margin-top:10px;font-variant-numeric:tabular-nums;letter-spacing:-0.03em;}
+.sv-viewed{
+  text-align:center;margin-top:10px;
+  display:none;
+}
+.sv-viewed-inner{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(255,59,48,0.12);color:#ff8080;
+  border:1px solid rgba(255,59,48,0.25);border-radius:99px;
+  font-size:0.6rem;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;
+  padding:4px 12px;
+}
+
+/* ── DESTROYED STATE ─────────────────────────── */
+.destroyed{
+  background:var(--B);border-radius:22px;
+  padding:36px 24px;text-align:center;
+  animation:popIn 0.4s ease both;
+}
+.dest-icon{font-size:4rem;display:block;margin-bottom:12px;animation:float 2s ease-in-out infinite;}
+.dest-title{font-size:1.3rem;font-weight:900;color:var(--Y);margin-bottom:8px;}
+.dest-sub{font-size:0.8rem;color:#666;line-height:1.7;}
+
+/* ── EMPTY STATE ─────────────────────────────── */
+.empty{text-align:center;padding:32px 20px;}
+.empty-icon{font-size:3rem;opacity:0.3;display:block;margin-bottom:10px;}
+.empty-txt{font-size:0.82rem;font-weight:700;color:#bbb;line-height:1.6;}
+
+/* ── SPINNER ─────────────────────────────────── */
+.spin{
+  width:17px;height:17px;
+  border:2.5px solid rgba(0,0,0,0.12);border-top-color:var(--B);
+  border-radius:50%;animation:rotate 0.7s linear infinite;display:inline-block;
+}
+.spin.y{border-top-color:var(--Y);}
+@keyframes rotate{to{transform:rotate(360deg);}}
+
+/* ── FOOTER ──────────────────────────────────── */
+footer{
+  margin-top:32px;
+  font-size:0.58rem;font-weight:800;
+  color:rgba(0,0,0,0.22);text-align:center;
+  letter-spacing:0.08em;text-transform:uppercase;
+  line-height:2.1;position:relative;z-index:10;
+}
+</style>
+</head>
+<body>
+
+<!-- background -->
+<div class="bg-ghost r">👻</div>
+<div class="bg-ghost l">👻</div>
+<div id="ptcls"></div>
+
+<!-- topbar -->
+<div class="topbar">
+  <div class="logo">
+    <span class="logo-icon">👻</span>
+    <span class="logo-name">SnapVault<span class="live-tag"><span class="live-dot"></span>AWS</span></span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- AWS config strip -->
+  <div class="cfg-strip" id="cfgStrip">
+    <div class="cfg-dot" id="cfgDot"></div>
+    <div class="cfg-text">
+      <div class="cfg-label">API Gateway Endpoint</div>
+      <div class="cfg-url" id="cfgUrl">Not configured — click Edit</div>
+    </div>
+    <button class="cfg-edit-btn" onclick="toggleUrlPanel()">✏️ Edit</button>
+  </div>
+
+  <!-- url edit panel -->
+  <div class="url-panel" id="urlPanel">
+    <div class="url-lbl">Paste your API Gateway Invoke URL</div>
+    <input class="url-inp" id="urlInp" type="text"
+      placeholder="https://abc123.execute-api.us-east-1.amazonaws.com/prod"/>
+    <button class="url-save" onclick="saveUrl()">✅ Save & Connect</button>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs">
+    <button class="tab on" id="t1" onclick="showTab('send')">📤 Send Snap</button>
+    <button class="tab"    id="t2" onclick="showTab('inbox')">📥 Inbox</button>
+    <button class="tab"    id="t3" onclick="showTab('view')">👁 View Snap</button>
+  </div>
+
+  <!-- ══ SEND TAB ══════════════════════════════ -->
+  <div id="sendTab">
+    <div class="card">
+
+      <div class="sec-lbl">Your Name</div>
+      <input type="text" id="fromName" placeholder="e.g. Anbu 😎" maxlength="30" class="mb"/>
+
+      <div class="sec-lbl">Pick a Vibe</div>
+      <div class="ep" id="emojiPicker"></div>
+
+      <div class="sec-lbl">Your Snap Message</div>
+      <textarea id="snapMsg" placeholder="Write something that shouldn't last forever… 👻" maxlength="500"></textarea>
+      <div class="char-row">
+        <span class="ttl-hint">⏱ Auto-destructs in 5 min</span>
+        <span class="cc" id="cc">0 / 500</span>
+      </div>
+
+      <button class="btn" id="sendBtn" onclick="doSend()">👻 Send Snap</button>
+
+      <!-- share box -->
+      <div class="share-box" id="shareBox">
+        <div class="sh-lbl">📎 Share this Snap ID with your friend</div>
+        <div class="sh-row">
+          <!--<div class="sh-id" id="shId">—</div>-->
+          <input class="sh-id" id="shId" readonly value="—"/>
+          <button class="sh-copy" id="shCopyBtn" onclick="copyId()">Copy</button>
+        </div>
+        <div class="sh-warn">⚠️ This snap will permanently self-destruct in 5 minutes.</div>
+      </div>
+
+      <div class="toast" id="sendToast"></div>
+
+      <hr/>
+
+      <!-- architecture info -->
+      <div class="arch">
+        <div class="arch-title">☁️ Cloud Architecture — AEDMS (Zero-Persistence Model)</div>
+        <div class="arch-row">
+          <span class="arch-icon">🌐</span>
+          <span class="arch-txt">Browser → S3 → API Gateway → Lambda</span>
+          <span class="arch-tag aws" id="at1">AWS</span>
+        </div>
+        <div class="arch-row">
+          <span class="arch-icon">⚡</span>
+          <span class="arch-txt">Lambda writes snap to DynamoDB with TTL</span>
+          <span class="arch-tag aws" id="at2">AWS</span>
+        </div>
+        <div class="arch-row">
+          <span class="arch-icon">🗑️</span>
+          <span class="arch-txt">DynamoDB auto-deletes after 5 minutes</span>
+          <span class="arch-tag aws" id="at3">AWS</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ INBOX TAB ═════════════════════════════ -->
+  <div id="inboxTab" style="display:none">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div>
+          <div style="font-size:1rem;font-weight:900;color:var(--B);">📬 Snap Inbox</div>
+          <div style="font-size:0.65rem;font-weight:700;color:var(--G);margin-top:2px;">All snaps vanish in 5 minutes</div>
+        </div>
+        <button onclick="clearInbox()" style="background:#ffebee;color:var(--R);border:none;border-radius:10px;padding:6px 12px;font-size:0.65rem;font-weight:900;font-family:'Nunito',sans-serif;cursor:pointer;">Clear All</button>
+      </div>
+      <div class="inbox-list" id="inboxList"></div>
+      <div id="inboxViewer"></div>
+    </div>
+  </div>
+
+  <!-- ══ VIEW TAB ══════════════════════════════ -->
+  <div id="viewTab" style="display:none">
+    <div class="card">
+      <div class="sec-lbl">Enter Snap ID</div>
+      <div style="display:flex;gap:8px;margin-bottom:15px;">
+        <input type="text" id="snapIdInput"
+          placeholder="Paste snap ID here…"
+          style="flex:1;font-size:0.78rem;letter-spacing:0.02em;"/>
+        <button id="pasteBtn" type="button" onclick="pasteId()"
+          style="border:2px solid #eee;background:#fafafa;border-radius:12px;padding:0 12px;font-size:1rem;cursor:pointer;transition:all 0.15s;"
+          title="Paste from clipboard">📋</button>
+      </div>
+      <button class="btn dark" id="viewBtn" onclick="doView()">👁 Open Snap</button>
+      <div class="toast" id="viewToast"></div>
+      <div id="viewViewer"></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  SnapVault &nbsp;·&nbsp; AEDMS &nbsp;·&nbsp; Cloud Computing Micro-Project<br/>
+  AWS S3 &nbsp;·&nbsp; API Gateway &nbsp;·&nbsp; Lambda (Node.js 22.x) &nbsp;·&nbsp; DynamoDB TTL<br/>
+  Zero-Persistence Model &nbsp;·&nbsp; Inspired by Snapchat
+</footer>
+
+<script>
+// ================================================================
+//  SNAPVAULT — AEDMS CLIENT
+//  Connects to real AWS Lambda + DynamoDB via API Gateway
+//  localStorage used for inbox (client-side snap tracking)
+// ================================================================
+
+const TTL_MS    = 5 * 60 * 1000;
+const INBOX_KEY = "sv_inbox";
+//const URL_KEY   = "sv_api_url";
+const EMOJIS    = ["👻","😂","❤️","🔥","😎","🥳","💀","🌙","✨","🎉","🫶","🤩"];
+
+//let apiUrl    = "";
+// 🔥 AUTO CONNECT API (FINAL FIX)
+const API_URL = "https://vemgtlgz5l.execute-api.us-east-1.amazonaws.com/prod";
+let apiUrl = API_URL;
+let selEmoji  = "👻";
+let viewTimer = null;
+
+// ── Particles ──────────────────────────────────────────────────
+(function(){
+  const wrap = document.getElementById("ptcls");
+  const icons = ["👻","✨","💫","⭐","🌟","💥"];
+  for(let i=0;i<20;i++){
+    const el = document.createElement("div");
+    el.className = "ptcl";
+    el.textContent = icons[i % icons.length];
+    el.style.cssText = `left:${Math.random()*100}vw;font-size:${10+Math.random()*14}px;animation-duration:${9+Math.random()*14}s;animation-delay:${Math.random()*14}s;`;
+    wrap.appendChild(el);
+  }
+})();
+
+// ── Init ───────────────────────────────────────────────────────
+window.onload = function(){
+  buildEmojiPicker();
+  setupCharCounter();
+  loadSavedUrl();
+  // Ensure paste button reliably calls pasteId (some environments ignore inline handlers)
+  try{
+    const p = document.getElementById('pasteBtn');
+    if(p && !p._boundPaste){ p.addEventListener('click', pasteId); p._boundPaste = true; }
+  }catch(e){}
+};
+
+function buildEmojiPicker(){
+  const row = document.getElementById("emojiPicker");
+  EMOJIS.forEach(em => {
+    const c = document.createElement("div");
+    c.className = "ec" + (em === selEmoji ? " on" : "");
+    c.textContent = em;
+    c.onclick = () => {
+      document.querySelectorAll(".ec").forEach(x => x.classList.remove("on"));
+      c.classList.add("on");
+      selEmoji = em;
+    };
+    row.appendChild(c);
+  });
+}
+
+function setupCharCounter(){
+  document.getElementById("snapMsg").addEventListener("input", () => {
+    const n  = document.getElementById("snapMsg").value.length;
+    const el = document.getElementById("cc");
+    el.textContent = n + " / 500";
+    el.classList.toggle("warn", n >= 450);
+  });
+}
+
+//function loadSavedUrl(){
+//  const saved = localStorage.getItem(URL_KEY);
+//  if(saved){ apiUrl = saved; updateCfgStrip(); }
+//}
+function loadSavedUrl(){
+  apiUrl = API_URL;
+  updateCfgStrip();
+}
+
+// ── Tabs ───────────────────────────────────────────────────────
+function showTab(tab){
+  ["send","inbox","view"].forEach(t => {
+    document.getElementById(t+"Tab").style.display = t === tab ? "block" : "none";
+  });
+  [["t1","send"],["t2","inbox"],["t3","view"]].forEach(([id,t]) => {
+    document.getElementById(id).className = "tab" + (t === tab ? " on" : "");
+  });
+  if(tab === "inbox") renderInbox();
+}
+
+// ── URL Config ─────────────────────────────────────────────────
+function toggleUrlPanel(){
+  const p = document.getElementById("urlPanel");
+  const showing = p.style.display === "block";
+  p.style.display = showing ? "none" : "block";
+  if(!showing){ document.getElementById("urlInp").value = apiUrl; }
+}
+
+function saveUrl(){
+  const v = document.getElementById("urlInp").value.trim().replace(/\/+$/, "");
+  if(!v.startsWith("http")){ alert("Enter a valid URL starting with https://"); return; }
+  apiUrl = v;
+  localStorage.setItem(URL_KEY, v);
+  document.getElementById("urlPanel").style.display = "none";
+  updateCfgStrip();
+  showToast(document.getElementById("sendToast"), "ok", "☁️ Connected to AWS! Ready to send snaps.");
+}
+
+function updateCfgStrip(){
+  const dot  = document.getElementById("cfgDot");
+  const lbl  = document.getElementById("cfgUrl");
+  const tags = ["at1","at2","at3"];
+  if(apiUrl){
+    dot.classList.add("ok");
+    lbl.textContent = apiUrl;
+    tags.forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = "LIVE";
+      el.className = "arch-tag live";
+    });
+  } else {
+    dot.classList.remove("ok");
+    lbl.textContent = "Not configured — click Edit";
+    tags.forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = "AWS";
+      el.className = "arch-tag aws";
+    });
+  }
+}
+
+// ── SEND SNAP (POST /snaps → Lambda → DynamoDB) ────────────────
+async function doSend(){
+  const message = document.getElementById("snapMsg").value.trim();
+  const from    = document.getElementById("fromName").value.trim() || "Anonymous";
+  const btn     = document.getElementById("sendBtn");
+  const toast   = document.getElementById("sendToast");
+  const sbox    = document.getElementById("shareBox");
+
+  // Validate
+  if(!message){ showToast(toast, "err", "⚠️ Write your snap message first!"); return; }
+  //if(!apiUrl){
+  //  showToast(toast, "err", "⚠️ Set your API Gateway URL first — click Edit above.");
+    //document.getElementById("urlPanel").style.display = "block";
+    //return;
+  //}
+  if(!apiUrl){
+    showToast(toast, "err", "❌ API not configured");
+    btn.disabled = false;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Sending to AWS…';
+  sbox.style.display = "none";
+  toast.style.display = "none";
+
+  try {
+    const res  = await fetch(apiUrl + "/snaps", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ message, from, emoji: selEmoji }),
+    });
+    const data = await res.json();
+
+    if(!data.success) throw new Error(data.error || "Lambda returned an error.");
+
+    // Save to local inbox so user can see it
+    const inbox = getInbox();
+    inbox[data.snapId] = {
+      snapId:    data.snapId,
+      message,
+      from,
+      emoji:     selEmoji,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + TTL_MS,
+      viewed:    false,
+    };
+    saveInbox(inbox);
+
+    // Show share box
+    //document.getElementById("shId").textContent = data.snapId;-->
+    document.getElementById("shId").value = data.snapId;
+    sbox.style.display = "block";
+    showToast(toast, "ok", "☁️ Snap stored in AWS DynamoDB! Share the ID — it self-destructs in 5 min.");
+
+    // Reset form
+    document.getElementById("snapMsg").value = "";
+    document.getElementById("cc").textContent = "0 / 500";
+    document.getElementById("cc").classList.remove("warn");
+
+  } catch(e){
+    showToast(toast, "err", "❌ " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "👻 Send Snap";
+  }
+}
+
+// ── COPY SNAP ID ───────────────────────────────────────────────
+function copyId(){
+  const id = document.getElementById("shId").value;
+  const btn = document.getElementById("shCopyBtn");
+
+  if(!id){
+    showToast(document.getElementById("sendToast"), "err", "⚠️ No Snap ID to copy.");
+    return;
+  }
+
+  // Prefer modern Clipboard API, fall back to execCommand for file:// or insecure contexts
+  function legacyCopy(){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = id;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      if(ok){
+        btn.textContent = "✅ Copied!";
+        try{ localStorage.setItem('sv_last_copied', id); }catch(e){}
+        setTimeout(() => btn.textContent = "Copy", 2000);
+      } else {
+        throw new Error("copy failed");
+      }
+    }catch(e){
+      showToast(document.getElementById("sendToast"), "err", "⚠️ Unable to copy to clipboard. Select and copy manually.");
+      btn.textContent = "Copy";
+    }
+  }
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(id).then(() => {
+      btn.textContent = "✅ Copied!";
+      try{ localStorage.setItem('sv_last_copied', id); }catch(e){}
+      setTimeout(() => btn.textContent = "Copy", 2000);
+    }).catch(() => legacyCopy());
+  } else {
+    legacyCopy();
+  }
+}
+
+// ── PASTE ──────────────────────────────────────────────────────
+async function pasteId(){
+  try{
+    const t = await navigator.clipboard.readText();
+    const v = t.trim();
+    if(v) {
+      document.getElementById("snapIdInput").value = v;
+      return;
+    }
+  } catch(e){ /* fallthrough to localStorage fallback */ }
+
+  // Fallback: use last copied ID stored locally (useful on file:// or insecure contexts)
+  try{
+    const last = localStorage.getItem('sv_last_copied');
+    if(last){ document.getElementById("snapIdInput").value = last; return; }
+  }catch(e){}
+
+  document.getElementById("snapIdInput").focus();
+}
+
+// ── INBOX ──────────────────────────────────────────────────────
+function getInbox(){ try{ return JSON.parse(localStorage.getItem(INBOX_KEY)||"{}"); } catch{ return {}; } }
+function saveInbox(d){ localStorage.setItem(INBOX_KEY, JSON.stringify(d)); }
+
+function purgeExpired(){
+  const inbox = getInbox();
+  const now   = Date.now();
+  let   changed = false;
+  for(const id in inbox){
+    if(inbox[id].expiresAt <= now){ delete inbox[id]; changed = true; }
+  }
+  if(changed) saveInbox(inbox);
+}
+
+function renderInbox(){
+  purgeExpired();
+  const inbox  = getInbox();
+  const list   = document.getElementById("inboxList");
+  const viewer = document.getElementById("inboxViewer");
+  viewer.innerHTML = "";
+  list.innerHTML   = "";
+  list.style.display = "flex";
+
+  const snaps = Object.values(inbox).sort((a,b) => b.createdAt - a.createdAt);
+
+  if(!snaps.length){
+    list.innerHTML = '<div class="empty"><span class="empty-icon">👻</span><div class="empty-txt">No snaps yet!<br/>Send one from the Send Snap tab.</div></div>';
+    return;
+  }
+
+  snaps.forEach(snap => {
+    const now  = Date.now();
+    const left = Math.max(0, snap.expiresAt - now);
+    const pct  = (left / TTL_MS) * 100;
+    const m    = Math.floor(left / 60000);
+    const s    = Math.floor((left % 60000) / 1000);
+
+    const item = document.createElement("div");
+    item.className = "snap-item";
+    item.innerHTML = `
+      <div class="si-em">${snap.emoji}</div>
+      <div class="si-info">
+        <div class="si-from">From: ${snap.from}</div>
+        <div class="si-meta">⏱ ${m}:${String(s).padStart(2,"0")} remaining</div>
+        <div class="si-bar"><div class="si-fill" style="width:${pct}%"></div></div>
+      </div>
+      <span class="si-badge ${snap.viewed ? "old" : "new"}">${snap.viewed ? "Seen" : "New"}</span>
+    `;
+    item.onclick = () => openInboxSnap(snap.snapId);
+    list.appendChild(item);
+  });
+}
+
+function openInboxSnap(snapId){
+  purgeExpired();
+  const inbox  = getInbox();
+  const snap   = inbox[snapId];
+  const viewer = document.getElementById("inboxViewer");
+  const list   = document.getElementById("inboxList");
+
+  if(!snap){
+    viewer.innerHTML = '<div class="destroyed" style="margin-top:14px"><span class="dest-icon">👻</span><div class="dest-title">Snap Destroyed!</div><div class="dest-sub">This snap has permanently self-destructed.<br/>No data remains anywhere.</div></div>';
+    list.style.display = "none";
+    return;
+  }
+
+  inbox[snapId].viewed = true;
+  saveInbox(inbox);
+  list.style.display = "none";
+  displaySnap(snap, viewer);
+}
+
+// ── VIEW BY ID (GET /snaps/{id} → Lambda → DynamoDB) ──────────
+async function doView(){
+  const snapId = document.getElementById("snapIdInput").value.trim();
+  const btn    = document.getElementById("viewBtn");
+  const toast  = document.getElementById("viewToast");
+  const viewer = document.getElementById("viewViewer");
+
+  if(!snapId){ showToast(toast, "err", "⚠️ Enter a Snap ID first."); return; }
+  if(!apiUrl){
+    showToast(toast, "err", "⚠️ Set your API Gateway URL first — click Edit above.");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin y"></div> Opening from AWS…';
+  toast.style.display = "none";
+  viewer.innerHTML = "";
+  if(viewTimer) clearInterval(viewTimer);
+
+  try {
+    const res  = await fetch(apiUrl + "/snaps/" + snapId);
+    const data = await res.json();
+
+    if(!data.success) throw new Error(data.error || "Snap not found.");
+
+    // Build snap object with ms timestamps for display
+    const snap = {
+      snapId,
+      from:      data.from,
+      emoji:     data.emoji,
+      message:   data.message,
+      expiresAt: data.expiresAt * 1000,
+      createdAt: data.createdAt * 1000,
+      viewed:    data.viewed,
+    };
+
+    displaySnap(snap, viewer);
+
+  } catch(e){
+    showToast(toast, "err", "💥 " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "👁 Open Snap";
+  }
+}
+
+// ── DISPLAY SNAP WITH LIVE COUNTDOWN ──────────────────────────
+function displaySnap(snap, container){
+  if(viewTimer) clearInterval(viewTimer);
+  container.style.display = "block";
+
+  const render = () => {
+    const now  = Date.now();
+    const left = Math.max(0, snap.expiresAt - now);
+    const pct  = (left / TTL_MS) * 100;
+    const m    = Math.floor(left / 60000);
+    const s    = Math.floor((left % 60000) / 1000);
+
+    // Timer bar colour: green → orange → red
+    const fillColor = left < 60000
+      ? "linear-gradient(90deg,#FF3B30,#FF9500)"
+      : left < 120000
+        ? "linear-gradient(90deg,#FF9500,#FFFC00)"
+        : "linear-gradient(90deg,#00C853,#FFFC00)";
+
+    if(left <= 0){
+      clearInterval(viewTimer);
+      // Remove from local inbox too
+      const inbox = getInbox();
+      delete inbox[snap.snapId];
+      saveInbox(inbox);
+      container.innerHTML = `
+        <div class="destroyed" style="margin-top:14px">
+          <span class="dest-icon">💥</span>
+          <div class="dest-title">Snap Destroyed!</div>
+          <div class="dest-sub">
+            This snap has permanently self-destructed.<br/>
+            DynamoDB TTL has deleted it from the cloud.<br/>
+            <strong style="color:var(--Y)">No data remains anywhere.</strong>
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="snap-viewer" style="display:block">
+        <div class="sv-head">
+          <span class="sv-emoji">${snap.emoji}</span>
+          <div class="sv-from-lbl">From</div>
+          <div class="sv-from-name">${snap.from}</div>
+        </div>
+        <div class="sv-body">
+          <div class="sv-msg">${snap.message}</div>
+        </div>
+        <div class="sv-foot">
+          <div class="sv-tlbl">Self-destructing in</div>
+          <div class="sv-track">
+            <div class="sv-fill" style="width:${pct}%;background:${fillColor}"></div>
+          </div>
+          <div class="sv-time">${m}:${String(s).padStart(2,"0")}</div>
+          ${snap.viewed ? `<div class="sv-viewed" style="display:block"><div class="sv-viewed-inner">👁 Viewed before</div></div>` : ""}
+        </div>
+      </div>`;
+  };
+
+  render();
+  viewTimer = setInterval(render, 1000);
+}
+
+// ── Clear inbox ────────────────────────────────────────────────
+function clearInbox(){
+  if(confirm("Delete all snaps from your local inbox?")){
+    localStorage.removeItem(INBOX_KEY);
+    renderInbox();
+  }
+}
+
+// ── Toast helper ───────────────────────────────────────────────
+function showToast(el, type, msg){
+  el.className = "toast " + type;
+  el.style.display = "block";
+  el.innerHTML = msg;
+}
+</script>
+</body>
+</html>
